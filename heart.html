@@ -262,8 +262,8 @@ const orifice = (dp, r, k) => {
 };
 
 // Simulate to steady state and return one beat of samples.
-function simulate({ hr = NORMAL.hr, stenosis = false, regurgitation = false, samples = 400 } = {}) {
-  const p = NORMAL;
+function simulate({ hr = NORMAL.hr, stenosis = false, regurgitation = false, contractility = 1, samples = 400 } = {}) {
+  const p = { ...NORMAL, lv: { ...NORMAL.lv, emax: NORMAL.lv.emax * contractility } };
   const tm = timing(hr);
   const aorticK = stenosis ? STENOSIS_K : p.aortic.k;
   const dt = 0.0002;
@@ -297,7 +297,7 @@ function simulate({ hr = NORMAL.hr, stenosis = false, regurgitation = false, sam
       vven += (qsys - qven) * dt;
     }
   }
-  return { tm, hr, stenosis, regurgitation, beat: annotate(out, tm) };
+  return { tm, hr, stenosis, regurgitation, contractility, beat: annotate(out, tm) };
 }
 
 // Phase names and heart-sound events, read from the valves.

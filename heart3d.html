@@ -113,12 +113,12 @@ margin:-10px 0 0 -4px;display:flex;align-items:center;gap:5px;box-shadow:0 1px 3
 .hint3d{position:absolute;left:12px;bottom:10px;font:11px ui-monospace,Consolas,monospace;color:var(--muted)}
 </style></head><body><main>
 <h1>The cardiac cycle: left heart</h1>
-<p class="sub">A 3D left heart cut open along its long axis (the plane of the echo parasternal long-axis view). Every wall, valve, pressure and sound is driven by one time-varying-elastance model of the left heart.</p>
+<p class="sub">A 3D heart in anatomical position, cut open through all four chambers. The heart is drawn in anatomical position with all four chambers; only the left heart (LA, LV, mitral and aortic valves, aorta) is simulated, so the right atrium, right ventricle and their valves are drawn still. Proportions are approximate. Every wall, valve, pressure and sound is driven by one time-varying-elastance model of the left heart.</p>
 <div class="grid">
   <section class="card" id="stage" tabindex="0" role="slider" aria-label="Cardiac cycle. Left and right arrows step, space plays or pauses." aria-valuemin="0" aria-valuemax="100">
-    <div class="head"><b>Left heart · 3D cutaway</b><span class="read" data-read></span></div>
+    <div class="head"><b>Heart · 3D four-chamber cutaway</b><span class="read" data-read></span></div>
     
-<div id="view3d" role="img" aria-label="Three-dimensional left heart, cut open along its long axis: right ventricle over the septum, left ventricle with papillary muscles and chordae, mitral valve, left atrium with pulmonary veins, aortic valve, aortic root and arch, pulmonary artery. Walls, valves and blood move with the cardiac cycle. Drag to rotate, scroll to zoom.">
+<div id="view3d" role="img" aria-label="Three-dimensional heart in anatomical position, cut open through all four chambers: right atrium with superior and inferior venae cavae, tricuspid valve, right ventricle and pulmonary trunk; left atrium with pulmonary veins, mitral valve, left ventricle with papillary muscles, aortic valve, aortic arch and coronary arteries. Drag to rotate. Walls, valves and blood of the left heart move with the cardiac cycle. Scroll to zoom.">
 <div id="labels3d"></div>
 <div class="tools3d"><button type="button" data-cut aria-pressed="true">Cutaway</button><button type="button" data-reset>Reset view</button></div>
 <span class="hint3d">drag to rotate · scroll to zoom</span>
@@ -187,38 +187,40 @@ margin:-10px 0 0 -4px;display:flex;align-items:center;gap:5px;box-shadow:0 1px 3
 </main>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
-// ---------- 3D left heart: WebGL cutaway in an isometric camera ----------
+// ---------- 3D heart in anatomical position: four chambers, great vessels, coronaries ----------
+// Heart frame (cm): +y toward the base (apex down), +x patient's left, +z anterior.
+// The group is then rotated so the apex points anterior, inferior and left.
+// Driven by the left-heart model: LV, LA, mitral and aortic valves, aorta and left-sided flow move;
+// the right heart is anatomical context and is drawn still (not simulated).
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { OutlineEffect } from "three/addons/effects/OutlineEffect.js";
-const TOON = window.__heart3dOptions?.style === "toon";
+const OPTS = window.__heart3dOptions || {};
+const TOON = OPTS.style === "toon";
 
 const host = document.getElementById("view3d");
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.localClippingEnabled = true;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = TOON ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 host.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const VIEW = 13;
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -200, 200);
-const TARGET = new THREE.Vector3(0.0, 0.6, -1.0);
-const HOME = { az: 32, el: 24 };
+const TARGET = new THREE.Vector3();
+const HOME = { az: 14, el: 8 };
+let FIT = { w: 16, h: 20 };
 function placeCamera(az, el) {
   const a = (az * Math.PI) / 180, e = (el * Math.PI) / 180;
-  camera.position.copy(TARGET).add(new THREE.Vector3(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)).multiplyScalar(40));
+  camera.position.copy(TARGET).add(new THREE.Vector3(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)).multiplyScalar(60));
   camera.lookAt(TARGET);
 }
-placeCamera(HOME.az, HOME.el);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.copy(TARGET);
 controls.enableDamping = true;
 controls.enablePan = false;
 controls.minZoom = 0.6;
-controls.maxZoom = 3.5;
-// touch: one finger scrolls the page, two fingers rotate and zoom the heart
+controls.maxZoom = 4;
 if (matchMedia("(pointer: coarse)").matches) {
   controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE };
   renderer.domElement.style.touchAction = "pan-y";
@@ -228,84 +230,26 @@ if (matchMedia("(pointer: coarse)").matches) {
 function resize() {
   const w = host.clientWidth, h = host.clientHeight, asp = w / h;
   renderer.setSize(w, h, false);
-  const half = Math.max(VIEW / 2, 7.4 / asp); // keep the whole heart in view on tall, narrow screens
+  const half = Math.max(FIT.h / 2, FIT.w / 2 / asp);
   camera.left = -half * asp; camera.right = half * asp; camera.top = half; camera.bottom = -half;
   camera.updateProjectionMatrix();
 }
-new ResizeObserver(resize).observe(host);
-resize();
 
-scene.add(new THREE.HemisphereLight(0xfff3ec, 0x5a3434, 1.1));
-const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(6, 9, 8); scene.add(key);
-const rim = new THREE.DirectionalLight(0xffd6cc, 0.8); rim.position.set(-8, 3, -4); scene.add(rim);
-const fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(-4, -2, 9); scene.add(fill);
-
-// ---------- materials ----------
-const clip = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0); // keeps z <= 0: the back half
-const clips = [clip];
-const mat = (o) => new THREE.MeshPhysicalMaterial({ clippingPlanes: clips, clipShadows: true, roughness: 0.48, clearcoat: 0.35, clearcoatRoughness: 0.4, ...o });
-const M = {
-  myo: mat({ color: 0xb03c3c }),
-  endo: mat({ color: 0x7d1a20, side: THREE.BackSide, roughness: 0.6, clearcoat: 0.6 }),
-  laWall: mat({ color: 0xc4575a, side: THREE.FrontSide }),
-  laEndo: mat({ color: 0x8a2228, side: THREE.BackSide, clearcoat: 0.6 }),
-  rvWall: mat({ color: 0xb4484a, side: THREE.FrontSide }),
-  rvEndo: mat({ color: 0x4a4f9e, side: THREE.BackSide, clearcoat: 0.5 }),
-  artery: mat({ color: 0xd9a596, roughness: 0.4 }),
-  lumen: mat({ color: 0x9c2a2e, side: THREE.BackSide }),
-  pa: mat({ color: 0x8a8fd0, roughness: 0.4 }),
-  paLumen: mat({ color: 0x3e4390, side: THREE.BackSide }),
-  vein: mat({ color: 0xc23a3c }),
-  valve: mat({ color: 0xf2e2c8, side: THREE.DoubleSide, roughness: 0.55, clearcoat: 0.2, sheen: 0.4 }),
-  calc: mat({ color: 0xe9d79a, side: THREE.DoubleSide, roughness: 0.85, clearcoat: 0 }),
-  fibrous: mat({ color: 0xead2bd, side: THREE.DoubleSide, roughness: 0.7 }),
-  pap: mat({ color: 0xa83a3a }),
-  rbc: mat({ color: 0x8e0f18, roughness: 0.35, clearcoat: 0.8 }),
-  fat: mat({ color: 0xeed49a, roughness: 0.7 }),
-};
-const chordMat = new THREE.LineBasicMaterial({ color: 0xf6ead9, clippingPlanes: clips });
-// flat illustrated style: toon bands + ink outlines
-const NO_LINE = { visible: false };
-let effect = null;
-if (TOON) {
-  const g = new THREE.DataTexture(new Uint8Array([150, 150, 150, 255, 210, 210, 210, 255, 255, 255, 255, 255]), 3, 1);
-  g.minFilter = g.magFilter = THREE.NearestFilter; g.needsUpdate = true;
-  const PAL = { myo: 0xe5584b, endo: 0xb3222d, laWall: 0xee7464, laEndo: 0xb3222d, rvWall: 0xe5584b, rvEndo: 0x5878d6, artery: 0xf4a28e, lumen: 0xb3222d, pa: 0x6e90e2, paLumen: 0x3c58b6, vein: 0xd9453e, valve: 0xfff4dc, calc: 0xf4d062, fibrous: 0xf9e3c3, pap: 0xd8463e, rbc: 0x7d101b, fat: 0xf2c94c };
-  for (const k of Object.keys(M)) {
-    const side = M[k].side;
-    M[k] = new THREE.MeshToonMaterial({ color: PAL[k], side, gradientMap: g, clippingPlanes: clips });
-    if (side === THREE.BackSide || k === "rbc") M[k].userData.outlineParameters = NO_LINE;
-  }
-  chordMat.color.set(0x3a2a2e);
-  chordMat.userData.outlineParameters = NO_LINE;
-  effect = new OutlineEffect(renderer, { defaultThickness: 0.006, defaultColor: [0.16, 0.11, 0.13], defaultAlpha: 1 });
-  renderer.toneMapping = THREE.NoToneMapping;
-}
-
-const heart = new THREE.Group();
-heart.rotation.z = -0.22;
-scene.add(heart);
+scene.add(new THREE.HemisphereLight(0xfff3ec, 0x5a3434, TOON ? 1.4 : 1.1));
+const key = new THREE.DirectionalLight(0xffffff, TOON ? 1.8 : 2.2); key.position.set(5, 9, 10); scene.add(key);
+const rim = new THREE.DirectionalLight(0xffd6cc, 0.7); rim.position.set(-8, 3, -4); scene.add(rim);
+const fillL = new THREE.DirectionalLight(0xffffff, 0.45); fillL.position.set(-6, -3, 8); scene.add(fillL);
 
 // ---------- helpers ----------
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
-// LV local -> heart: lathe axis h (base 0, apex negative) along +x, angle phi around it
-const lvPoint = (h, r, phi) => V(h, -r * Math.sin(phi), r * Math.cos(phi));
-function alignY(obj, from, to) {
-  const d = new THREE.Vector3().subVectors(to, from);
-  obj.position.copy(from).addScaledVector(d, 0.5);
-  obj.quaternion.setFromUnitVectors(V(0, 1, 0), d.clone().normalize());
-  obj.scale.set(1, d.length(), 1);
-}
+const D2R = Math.PI / 180;
 function gridGeometry(nu, nv) {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(new Float32Array((nu + 1) * (nv + 1) * 3), 3));
   const idx = [];
-  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
-    const a = i * (nv + 1) + j, b = a + nv + 1;
-    idx.push(a, b, a + 1, b, b + 1, a + 1);
-  }
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) { const a = i * (nv + 1) + j, b = a + nv + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
   g.setIndex(idx);
   return g;
 }
@@ -316,10 +260,104 @@ function fillGrid(g, nu, nv, f) {
   g.computeVertexNormals();
   g.computeBoundingSphere();
 }
+function flipWinding(g) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } g.index.needsUpdate = true; g.computeVertexNormals(); }
+// after the first fill: if normals point toward `inside(i)` (a point inside the surface near vertex i), flip it
+function orientOutward(g, inside) {
+  const p = g.attributes.position, n = g.attributes.normal; let score = 0;
+  for (let i = 0; i < p.count; i += 7) { const q = inside(i); score += (p.getX(i) - q.x) * n.getX(i) + (p.getY(i) - q.y) * n.getY(i) + (p.getZ(i) - q.z) * n.getZ(i); }
+  if (score < 0) flipWinding(g);
+}
+function alignY(obj, from, to) {
+  const d = new THREE.Vector3().subVectors(to, from);
+  obj.position.copy(from).addScaledVector(d, 0.5);
+  obj.quaternion.setFromUnitVectors(V(0, 1, 0), d.clone().normalize());
+  obj.scale.set(1, d.length(), 1);
+}
+function frameOf(o, axis, hint = V(1, 0, 0)) {
+  const a = axis.clone().normalize();
+  const u = hint.clone().addScaledVector(a, -hint.dot(a)).normalize();
+  const v = new THREE.Vector3().crossVectors(a, u).normalize();
+  return { o: o.clone(), a, u, v };
+}
+const at = (F, h, r, phi) => F.o.clone().addScaledVector(F.a, h).addScaledVector(F.u, r * Math.cos(phi)).addScaledVector(F.v, r * Math.sin(phi));
 
-// ---------- LV: thick-walled solid with a capped cut ----------
-const LV = { rb: 2.35, wb: 0.42, N: 30, seg: 72 };
-const AX0 = 6.6, B0 = 2.7, W0 = 1.0;
+// ---------- clipping: the cutaway plane, defined in the heart frame ----------
+const heart = new THREE.Group();
+heart.rotation.set(-24 * D2R, 0, 38 * D2R, "XZY"); // apex anterior, inferior, to the left
+scene.add(heart);
+heart.updateMatrixWorld(true);
+// four-chamber cut: keep z <= 0.9 - 1.05 x - 0.12 y, an oblique plane through RA+RV (anterior right)
+// and LA+LV (posterior left), close to the plane of the apical four-chamber view
+const CUT_N = V(-1.05, -0.12, -1), CUT_LEN = CUT_N.length();
+const CUT_LOCAL = new THREE.Plane(CUT_N.clone().divideScalar(CUT_LEN), 0.9 / CUT_LEN);
+const ABOVE_LOCAL = new THREE.Plane(V(0, 1, 0), -2.6); // great vessels above y = 2.6 stay whole
+const cutW = new THREE.Plane(), aboveW = new THREE.Plane();
+let cutaway = true;
+function updatePlanes() {
+  cutW.copy(CUT_LOCAL).applyMatrix4(heart.matrixWorld);
+  if (!cutaway) cutW.constant += 1000;
+  aboveW.copy(ABOVE_LOCAL).applyMatrix4(heart.matrixWorld);
+  avClipTop.copy(AV_TOP_LOCAL).applyMatrix4(heart.matrixWorld);
+}
+const avClipTop = new THREE.Plane(), AV_TOP_LOCAL = new THREE.Plane(V(0, 1, 0), -0.1);
+updatePlanes();
+const clips = [cutW];
+const vesselClips = [cutW, aboveW];
+
+// ---------- materials ----------
+const PHYS = { roughness: 0.48, clearcoat: 0.35, clearcoatRoughness: 0.4 };
+const SPEC = {
+  myo: [0xb03c3c, 0xe5584b], cut: [0xd9706b, 0xf7a896], endoL: [0x7d1a20, 0xb3222d], endoR: [0x434a9a, 0x5878d6],
+  atrium: [0xc4575a, 0xee7464], rWall: [0xb4484a, 0xe5584b], artery: [0xd9a596, 0xf4a28e], lumenL: [0x9c2a2e, 0xb3222d],
+  pa: [0x8a8fd0, 0x6e90e2], lumenR: [0x3e4390, 0x3c58b6], vena: [0x5a5fae, 0x5878d6], pvein: [0xc23a3c, 0xd9453e],
+  valve: [0xf2e2c8, 0xfff4dc], calc: [0xe9d79a, 0xf4d062], fibrous: [0xead2bd, 0xf9e3c3], pap: [0xa83a3a, 0xd8463e],
+  rbc: [0x8e0f18, 0x7d101b], coronary: [0xc8342f, 0xe2453c], fat: [0xe9cf94, 0xf2d27a],
+};
+let gradient = null;
+if (TOON) {
+  gradient = new THREE.DataTexture(new Uint8Array([150, 150, 150, 255, 210, 210, 210, 255, 255, 255, 255, 255]), 3, 1);
+  gradient.minFilter = gradient.magFilter = THREE.NearestFilter; gradient.needsUpdate = true;
+}
+const NO_LINE = { visible: false };
+function mat(key, { side = THREE.FrontSide, planes = clips, intersect = false, line = true } = {}) {
+  const color = SPEC[key][TOON ? 1 : 0];
+  const m = TOON ? new THREE.MeshToonMaterial({ color, side, gradientMap: gradient }) : new THREE.MeshPhysicalMaterial({ color, side, ...PHYS });
+  m.clippingPlanes = planes;
+  m.clipIntersection = intersect;
+  if (!line || side === THREE.BackSide) m.userData.outlineParameters = NO_LINE;
+  return m;
+}
+const M = {
+  myo: mat("myo"), endoL: mat("endoL", { side: THREE.BackSide }),
+  atrium: mat("atrium"), endoLA: mat("endoL", { side: THREE.BackSide }), endoRA: mat("endoR", { side: THREE.BackSide }),
+  rWall: mat("rWall"), endoRV: mat("endoR", { side: THREE.BackSide }),
+  aorta: mat("artery", { planes: vesselClips, intersect: true }), aortaIn: mat("lumenL", { side: THREE.BackSide, planes: vesselClips, intersect: true }),
+  pa: mat("pa", { planes: vesselClips, intersect: true }), paIn: mat("lumenR", { side: THREE.BackSide, planes: vesselClips, intersect: true }),
+  vena: mat("vena", { planes: vesselClips, intersect: true }), venaIn: mat("lumenR", { side: THREE.BackSide, planes: vesselClips, intersect: true }),
+  pvein: mat("pvein"), pveinIn: mat("lumenL", { side: THREE.BackSide }),
+  valve: mat("valve", { side: THREE.DoubleSide }), calc: mat("calc", { side: THREE.DoubleSide }),
+  fibrous: mat("fibrous", { side: THREE.DoubleSide }), pap: mat("pap"),
+  rbc: mat("rbc", { line: false }), coronary: mat("coronary"), fat: mat("fat"),
+};
+const chordMat = new THREE.LineBasicMaterial({ color: TOON ? 0x3a2a2e : 0xf6ead9, clippingPlanes: clips });
+chordMat.userData.outlineParameters = NO_LINE;
+const effect = TOON ? new OutlineEffect(renderer, { defaultThickness: 0.0055, defaultColor: [0.16, 0.11, 0.13], defaultAlpha: 1 }) : null;
+const twoSided = (geo, outer, inner) => { const g = new THREE.Group(); g.add(new THREE.Mesh(geo, outer), new THREE.Mesh(geo, inner)); heart.add(g); return g; };
+
+// ---------- the fibrous skeleton: valve plane at y = 0 ----------
+const LV_BASE = V(1.6, 0, -0.4);
+const LV_APEX = V(1.6, -7.9, -0.4); // axis along the heart frame's y; the group rotation gives the real tilt
+const LVF = frameOf(LV_BASE, new THREE.Vector3().subVectors(LV_APEX, LV_BASE));
+const LV = { rb: 3.1, wb: 0.5, nP: 30, nPhi: 72 };
+const MITRAL = { c: V(2.2, 0, -1.1), r: 1.35, n: V(0, -1, 0) };
+const AORTIC = { c: V(-0.2, 0.3, 0.6), r: 1.02 };
+const RV_SPAN = [76 * D2R, 176 * D2R]; // around the LV axis: anterior interventricular groove → right border
+const TRI_PHI = 133 * D2R;
+const TRICUSPID = { c: at(LVF, 0, LV.rb + LV.wb + 1.35, TRI_PHI).setY(0), r: 1.25 };
+const PULMONIC = { c: V(1.7, 2.3, 2.5), r: 0.95 };
+
+// ---------- LV: thick wall, capped at the cut ----------
+const AX0 = 7.9, B0 = 2.75, W0 = 1.0;
 const MYO_K = (AX0 + W0) * (B0 + W0) - AX0 * B0;
 function lvDims(v) {
   const r = Math.min(Math.max(v, 15), 200) / 120;
@@ -327,198 +365,253 @@ function lvDims(v) {
   const w = (-(a + b) + Math.sqrt((a + b) ** 2 + 4 * MYO_K)) / 2;
   return { a, b, w };
 }
-const rIn = (u, d) => lerp(LV.rb, d.b * Math.sqrt(Math.max(0, 1 - u * u)), sstep(0, 0.32, u));
-const rOut = (u, d) => lerp(LV.rb + LV.wb, (d.b + d.w) * Math.sqrt(Math.max(0, 1 - u * u)), sstep(0, 0.32, u));
-function lvProfile(d) {
+const rIn = (u, d) => lerp(LV.rb, d.b * Math.sqrt(Math.max(0, 1 - u * u)), sstep(0, 0.3, u));
+const rOut = (u, d) => lerp(LV.rb + LV.wb, (d.b + d.w) * Math.sqrt(Math.max(0, 1 - u * u)), sstep(0, 0.3, u));
+function lvProfile(d) { // closed meridian [r, h]: outer apex → base rim → inner apex
   const pts = [];
-  for (let i = LV.N; i >= 0; i--) { const u = Math.sin((i / LV.N) * Math.PI / 2); pts.push(new THREE.Vector2(rOut(u, d), -(d.a + d.w) * u)); }
-  for (let i = 0; i <= LV.N; i++) { const u = Math.sin((i / LV.N) * Math.PI / 2); pts.push(new THREE.Vector2(rIn(u, d), -d.a * u)); }
-  pts[0].x = 0; pts[pts.length - 1].x = 0;
+  for (let i = LV.nP; i >= 0; i--) { const u = Math.sin((i / LV.nP) * Math.PI / 2); pts.push([rOut(u, d), (d.a + d.w) * u]); }
+  for (let i = 0; i <= LV.nP; i++) { const u = Math.sin((i / LV.nP) * Math.PI / 2); pts.push([rIn(u, d), d.a * u]); }
+  pts[0][0] = 0; pts[pts.length - 1][0] = 0;
   return pts;
 }
-let lvGeo = new THREE.LatheGeometry(lvProfile(lvDims(120)), LV.seg);
-const lvMesh = new THREE.Mesh(lvGeo, M.myo);
-lvMesh.rotation.z = -Math.PI / 2;
-lvMesh.renderOrder = 3;
-heart.add(lvMesh);
-// stencil cap (three.js clipping-stencil technique)
-function stencilPass(side, op) {
-  const m = new THREE.MeshBasicMaterial({ depthWrite: false, depthTest: false, colorWrite: false, stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc, side, clippingPlanes: clips, stencilFail: op, stencilZFail: op, stencilZPass: op });
-  const mesh = new THREE.Mesh(lvGeo, m); mesh.rotation.z = -Math.PI / 2; mesh.renderOrder = 1; heart.add(mesh); return mesh;
+const LV_NU = 2 * LV.nP + 1;
+const lvGeo = gridGeometry(LV_NU, LV.nPhi);
+function updateLV(d) {
+  const prof = lvProfile(d);
+  fillGrid(lvGeo, LV_NU, LV.nPhi, (s, v) => { const [r, h] = prof[Math.round(s * LV_NU)]; return at(LVF, h, r, v * Math.PI * 2); });
 }
-const stencilMeshes = [stencilPass(THREE.BackSide, THREE.IncrementWrapStencilOp), stencilPass(THREE.FrontSide, THREE.DecrementWrapStencilOp)];
-for (const m of stencilMeshes) m.material.userData.outlineParameters = { visible: false };
-const capMat = new (TOON ? THREE.MeshBasicMaterial : THREE.MeshStandardMaterial)({ color: TOON ? 0xf7a896 : 0xd9706b, ...(TOON ? {} : { roughness: 0.75 }), stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp });
-const cap = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), capMat);
-cap.renderOrder = 2;
-capMat.userData.outlineParameters = { visible: false };
-cap.onAfterRender = (r) => r.clearStencil();
-scene.add(cap); // the cut plane is world z = 0
+updateLV(lvDims(120));
+orientOutward(lvGeo, (i) => { // outer half: the axis is inside; inner half: the wall (just outside the cavity) is inside
+  const p = lvGeo.attributes.position, x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = V(LV_BASE.x, y, LV_BASE.z);
+  if (i < p.count / 2) return ax;
+  const rad = V(x, y, z).sub(ax); return rad.lengthSq() < 1e-6 ? ax : V(x, y, z).addScaledVector(rad.normalize(), 0.4);
+});
+const lvMesh = new THREE.Mesh(lvGeo, M.myo); lvMesh.renderOrder = 3; heart.add(lvMesh);
 
-// ---------- fibrous skeleton at the base, with mitral and aortic orifices ----------
-const MITRAL = { c: V(0.08, -0.95, 0), r: 1.22 };
-const AORTIC = { c: V(0.2, 1.22, 0), r: 0.95, axis: V(1, 0.42, 0).normalize() };
-{
-  const sh = new THREE.Shape(); sh.absarc(0, 0, LV.rb + LV.wb, 0, Math.PI * 2, false);
-  const h1 = new THREE.Path(); h1.absarc(0, MITRAL.c.y, MITRAL.r, 0, Math.PI * 2, true);
-  const h2 = new THREE.Path(); h2.absarc(0, AORTIC.c.y, AORTIC.r, 0, Math.PI * 2, true);
-  sh.holes.push(h1, h2);
-  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.14, bevelEnabled: false, curveSegments: 48 });
-  g.rotateY(Math.PI / 2);
-  heart.add(new THREE.Mesh(g, M.fibrous));
+// valve-plane plates (also capped): LV roof with mitral + aortic orifices, RV roof with tricuspid orifice
+const PLATE_T = 0.24;
+function plateGeometry(shape) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth: PLATE_T, bevelEnabled: false, curveSegments: 40 });
+  g.rotateX(Math.PI / 2); // shape (x, y) → world (x, z); extrusion runs down y
+  g.translate(0, PLATE_T / 2, 0);
+  return g;
 }
+const circleHole = (c, r) => { const p = new THREE.Path(); p.absarc(c.x, c.z, r, 0, Math.PI * 2, true); return p; };
+const lvRoof = (() => {
+  const s = new THREE.Shape(); s.absarc(LV_BASE.x, LV_BASE.z, LV.rb + LV.wb - 0.08, 0, Math.PI * 2, false);
+  s.holes.push(circleHole(MITRAL.c, MITRAL.r), circleHole(AORTIC.c, AORTIC.r));
+  return plateGeometry(s);
+})();
+const RV_BULGE_BASE = 3.1;
+const rvBulge = (u, t) => RV_BULGE_BASE * Math.pow(Math.sin(Math.PI * t), 0.75) * Math.pow(Math.max(0, 1 - u / 0.82), 0.32);
+const rvRoof = (() => {
+  const s = new THREE.Shape(), N = 40, R0 = LV.rb + LV.wb;
+  const pt = (phi, r) => at(LVF, 0, r, phi);
+  for (let i = 0; i <= N; i++) { const t = i / N, phi = lerp(RV_SPAN[0], RV_SPAN[1], t), p = pt(phi, R0 + rvBulge(0, t) - 0.08); i ? s.lineTo(p.x, p.z) : s.moveTo(p.x, p.z); }
+  for (let i = N; i >= 0; i--) { const t = i / N, phi = lerp(RV_SPAN[0], RV_SPAN[1], t), p = pt(phi, R0 - 0.3); s.lineTo(p.x, p.z); }
+  s.holes.push(circleHole(TRICUSPID.c, TRICUSPID.r));
+  return plateGeometry(s);
+})();
+heart.add(new THREE.Mesh(lvRoof, M.fibrous), new THREE.Mesh(rvRoof, M.fibrous));
+
+// stencil caps for the thick, closed solids (LV wall, plates)
+function stencilPass(geo, side, op) {
+  const m = new THREE.MeshBasicMaterial({ depthWrite: false, depthTest: false, colorWrite: false, stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc, side, clippingPlanes: clips, stencilFail: op, stencilZFail: op, stencilZPass: op });
+  m.userData.outlineParameters = NO_LINE;
+  const mesh = new THREE.Mesh(geo, m); mesh.renderOrder = 1; heart.add(mesh);
+}
+for (const g of [lvGeo, lvRoof, rvRoof]) { stencilPass(g, THREE.BackSide, THREE.IncrementWrapStencilOp); stencilPass(g, THREE.FrontSide, THREE.DecrementWrapStencilOp); }
+const capMat = new (TOON ? THREE.MeshBasicMaterial : THREE.MeshStandardMaterial)({ color: SPEC.cut[TOON ? 1 : 0], ...(TOON ? {} : { roughness: 0.75 }), stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp });
+capMat.userData.outlineParameters = NO_LINE;
+const cap = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), capMat);
+cap.quaternion.setFromUnitVectors(V(0, 0, 1), CUT_LOCAL.normal.clone().negate());
+cap.position.copy(CUT_LOCAL.normal).multiplyScalar(-CUT_LOCAL.constant);
+cap.renderOrder = 2;
+cap.onAfterRender = (r) => r.clearStencil();
+heart.add(cap);
+
+// ---------- RV: crescent free wall wrapped around the septum (static) ----------
+const RV_NU = 36, RV_NV = 40;
+const rvGeo = gridGeometry(RV_NU, RV_NV);
+twoSided(rvGeo, M.rWall, M.endoRV);
+const D_REF = lvDims(120);
+fillGrid(rvGeo, RV_NU, RV_NV, (s, t) => {
+  const u = lerp(0.0, 0.84, s), phi = lerp(RV_SPAN[0], RV_SPAN[1], t);
+  return at(LVF, (D_REF.a + D_REF.w) * u + 0.05, rOut(u, D_REF) + 0.02 + rvBulge(u, t), phi);
+});
+orientOutward(rvGeo, (i) => { const y = rvGeo.attributes.position.getY(i); return V(LV_BASE.x, y, LV_BASE.z); });
+// RV outflow tract (infundibulum) up to the pulmonary valve, anterior to the aortic root
+const RVOT_PTS = [at(LVF, 1.2, LV.rb + LV.wb + 1.3, 96 * D2R), at(LVF, 0.1, LV.rb + LV.wb + 1.0, 96 * D2R).setY(0.6), V(1.5, 1.6, 3.0), PULMONIC.c.clone()];
 
 // ---------- tubes with a radius along their length ----------
-function makeTube(points, n, m, radius, outer, inner) {
+function makeTube(points, n, m, radius, outer, inner, closedEnds = false) {
   const curve = new THREE.CatmullRomCurve3(points, false, "centripetal");
   const frames = curve.computeFrenetFrames(n, false);
   const geo = gridGeometry(n, m);
   const update = (extra = 0) => fillGrid(geo, n, m, (u, v) => {
-    const i = Math.round(u * n), t = i / n, a = v * Math.PI * 2, r = radius(t) + extra * sstep(0, 0.15, t);
-    const c = curve.getPointAt(t);
-    return c.add(frames.normals[i].clone().multiplyScalar(r * Math.cos(a))).add(frames.binormals[i].clone().multiplyScalar(r * Math.sin(a)));
+    const i = Math.round(u * n), t = i / n, a = v * Math.PI * 2, r = radius(t) + extra * sstep(0, 0.12, t) * (1 - sstep(0.3, 0.6, t));
+    return curve.getPointAt(t).add(frames.normals[i].clone().multiplyScalar(r * Math.cos(a))).add(frames.binormals[i].clone().multiplyScalar(r * Math.sin(a)));
   });
   update();
-  const group = new THREE.Group();
-  group.add(new THREE.Mesh(geo, outer), new THREE.Mesh(geo, inner));
-  heart.add(group);
-  return { curve, update, group };
+  orientOutward(geo, (i) => curve.getPointAt(Math.floor(i / (m + 1)) / n));
+  const group = inner ? twoSided(geo, outer, inner) : (() => { const m2 = new THREE.Mesh(geo, outer); heart.add(m2); return m2; })();
+  return { curve, update, group, geo };
 }
-// aorta: root with sinuses, ascending, arch, descending (behind the LA)
-const aortaPts = [AORTIC.c.clone(), V(1.3, 1.7, 0), V(2.5, 2.7, 0), V(3.0, 4.1, -0.5), V(2.5, 5.2, -1.7), V(1.2, 5.4, -3.0), V(0.2, 4.3, -3.7), V(-0.1, 1.5, -3.9), V(-0.2, -3.8, -3.9)];
-const aorta = makeTube(aortaPts, 140, 40, (t) => (0.98 + 0.34 * Math.exp(-(((t - 0.05) / 0.035) ** 2))) * lerp(1, 0.82, sstep(0.3, 0.8, t)), M.artery, M.lumen);
-for (const [t, h] of [[0.4, 1.7], [0.46, 1.9], [0.52, 1.8]]) {
-  const p = aorta.curve.getPointAt(t), b = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 1, 20, 1, true), M.artery);
-  alignY(b, p, p.clone().add(V(-0.25, h, 0.15)));
-  heart.add(b);
-}
-// pulmonary trunk and branches (deoxygenated, from the RV)
-const paTrunk = makeTube([V(0.2, 2.95, 1.0), V(0.4, 4.0, 0.9), V(0.1, 5.0, 0.1), V(-0.5, 5.4, -1.0)], 50, 32, () => 0.82, M.pa, M.paLumen);
-makeTube([V(-0.5, 5.4, -1.0), V(-1.3, 5.2, -2.0), V(-2.2, 4.8, -2.6)], 30, 24, () => 0.55, M.pa, M.paLumen);
-makeTube([V(-0.5, 5.4, -1.0), V(0.4, 5.0, -2.4), V(1.6, 4.6, -2.6), V(3.0, 4.3, -2.4)], 40, 24, () => 0.55, M.pa, M.paLumen);
+makeTube(RVOT_PTS, 40, 32, (t) => lerp(1.25, PULMONIC.r + 0.12, sstep(0.3, 1, t)), M.rWall, M.endoRV);
 
-// ---------- LA: thin-walled chamber on the mitral orifice ----------
-const LA = { c: V(2.55, -2.45, -0.7), seg: 64 };
-const laAxis = new THREE.Vector3().subVectors(MITRAL.c, LA.c);
-const laDist = laAxis.length();
-laAxis.normalize();
-const laGeo = gridGeometry(36, LA.seg);
-const laGroup = new THREE.Group();
-laGroup.add(new THREE.Mesh(laGeo, M.laWall), new THREE.Mesh(laGeo, M.laEndo));
-heart.add(laGroup);
-const laBasis = (() => { const u = V(0, 0, 1).cross(laAxis).normalize(); const w = laAxis.clone().cross(u).normalize(); return { u, w }; })();
+// ---------- great vessels ----------
+const AORTA_PTS = [V(-0.2, -0.15, 0.6), AORTIC.c.clone(), V(-0.35, 2.0, 0.75), V(-0.5, 4.2, 0.65), V(-0.55, 6.4, 0.35), V(0.4, 8.2, -0.9), V(2.0, 8.6, -2.4), V(3.0, 7.3, -3.7), V(3.0, 4.0, -4.5), V(2.9, 0.0, -4.6), V(2.8, -5.5, -4.6)];
+const aorta = makeTube(AORTA_PTS, 160, 40, (t) => (1.18 + 0.32 * Math.exp(-(((t - 0.035) / 0.03) ** 2))) * lerp(1, 0.84, sstep(0.35, 0.7, t)), M.aorta, M.aortaIn);
+const ARCH_BRANCHES = [[0.43, V(-1.4, 3.2, 0.6), 0.55, "Brachiocephalic"], [0.48, V(0.0, 3.4, 0.0), 0.42, "L common carotid"], [0.53, V(0.6, 3.2, -0.3), 0.45, "L subclavian"]];
+for (const [t, dir, r] of ARCH_BRANCHES) {
+  const p = aorta.curve.getPointAt(t);
+  makeTube([p.clone().addScaledVector(dir.clone().normalize(), 0.6), p.clone().add(dir.clone().multiplyScalar(0.55)), p.clone().add(dir)], 12, 18, () => r, M.aorta, M.aortaIn);
+}
+const PT_PTS = [PULMONIC.c.clone(), V(2.05, 3.8, 2.15), V(2.3, 5.1, 0.5)];
+const ptTrunk = makeTube(PT_PTS, 40, 32, () => 1.08, M.pa, M.paIn);
+makeTube([V(2.3, 5.1, 0.5), V(3.3, 5.35, -1.1), V(4.4, 5.3, -2.3)], 24, 24, () => 0.72, M.pa, M.paIn); // left PA, under the arch
+makeTube([V(2.3, 5.1, 0.5), V(1.0, 5.35, -1.6), V(-1.2, 5.3, -2.2), V(-3.2, 5.0, -2.2)], 30, 24, () => 0.72, M.pa, M.paIn); // right PA, behind aorta and SVC
+
+// ---------- atria (thin walls, open onto their AV valves) ----------
+const atriumClips = [cutW, avClipTop];
+for (const k of ["atrium", "endoLA", "endoRA", "pvein", "pveinIn"]) M[k].clippingPlanes = atriumClips;
+function ellipsoidGeo() { return gridGeometry(36, 48); }
+function fillEllipsoid(geo, c, r) {
+  fillGrid(geo, 36, 48, (s, t) => { const th = s * Math.PI, ph = t * Math.PI * 2; return V(c.x + r.x * Math.sin(th) * Math.cos(ph), c.y + r.y * Math.cos(th), c.z + r.z * Math.sin(th) * Math.sin(ph)); });
+}
+const RA = { c: V(-2.05, 1.25, 3.05), r: V(2.05, 1.75, 1.95) };
+const raGeo = ellipsoidGeo(); fillEllipsoid(raGeo, RA.c, RA.r); orientOutward(raGeo, () => RA.c); twoSided(raGeo, M.atrium, M.endoRA);
+const raa = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), M.atrium); raa.scale.set(1.1, 0.75, 0.6); raa.position.set(-0.4, 2.6, 4.3); raa.rotation.z = 0.5; heart.add(raa); // right auricle
+const LA = { c: V(2.15, 1.0, -1.35), r0: V(2.45, 1.45, 2.0) };
+const laGeo = ellipsoidGeo(); fillEllipsoid(laGeo, LA.c, LA.r0); orientOutward(laGeo, () => LA.c); twoSided(laGeo, M.atrium, M.endoLA);
+const laa = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), M.atrium); laa.scale.set(1.0, 0.6, 0.55); laa.rotation.z = -0.4; heart.add(laa); // left auricle
+const SVC_PTS = [V(-2.35, 2.6, 2.75), V(-2.45, 5.5, 2.1), V(-2.6, 9.4, 1.4)];
+makeTube(SVC_PTS, 30, 28, () => 0.98, M.vena, M.venaIn);
+const IVC_PTS = [V(-2.6, 0.35, 1.6), V(-3.5, -0.9, -0.7), V(-3.4, -4.6, -2.0)];
+makeTube(IVC_PTS, 30, 28, () => 1.08, M.vena, M.venaIn);
+const PV_DIRS = [V(1, 0.35, -0.9), V(1, -0.3, -0.85), V(-0.95, 0.35, -0.9), V(-0.95, -0.3, -0.85)].map((d) => d.normalize());
+const pveins = PV_DIRS.map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.5, 1, 18, 1, true), M.pvein), new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.5, 1, 18, 1, true), M.pveinIn)); heart.add(g); return g; });
 function updateLA(vla) {
-  const R = 2.05 * Math.cbrt(Math.min(Math.max(vla, 20), 160) / 55);
-  const prof = (s) => { // s 0..1 from mitral annulus round to the far pole
-    if (s < 0.18) { const k = s / 0.18; return [lerp(MITRAL.r, MITRAL.r * 1.04, k), lerp(laDist, R * 0.86, k)]; }
-    const al = lerp(0.55, Math.PI, (s - 0.18) / 0.82);
-    return [R * Math.sin(al), R * Math.cos(al)];
-  };
-  fillGrid(laGeo, 36, LA.seg, (s, v) => {
-    const [r, h] = prof(s), a = v * Math.PI * 2;
-    return LA.c.clone().addScaledVector(laAxis, h).addScaledVector(laBasis.u, r * Math.cos(a)).addScaledVector(laBasis.w, r * Math.sin(a));
-  });
-  return R;
+  const s = Math.cbrt(Math.min(Math.max(vla, 20), 160) / 55);
+  const r = V(LA.r0.x * lerp(1, s, 0.8), LA.r0.y * s, LA.r0.z * lerp(1, s, 0.8));
+  fillEllipsoid(laGeo, LA.c, r);
+  PV_DIRS.forEach((d, i) => { const from = V(LA.c.x + d.x * r.x * 0.8, LA.c.y + d.y * r.y * 0.8, LA.c.z + d.z * r.z * 0.8); alignY(pveins[i], from, from.clone().addScaledVector(d, 2.2)); });
+  laa.position.set(LA.c.x + r.x * 0.82, LA.c.y + r.y * 0.6, LA.c.z + r.z * 0.75);
+  return r;
 }
-const veins = [V(1, 0.35, -0.7), V(1, -0.45, -0.6), V(0.35, 0.3, -1), V(0.25, -0.55, -1)].map((d) => {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.4, 1, 18, 1, true), M.vein);
-  heart.add(m); return { d: d.normalize(), m };
-});
 
-// ---------- RV: free wall wrapped over the septum ----------
-const RV = { nu: 40, nv: 40, phi0: Math.PI + 0.2, phi1: 2 * Math.PI - 0.2 };
-const rvGeo = gridGeometry(RV.nu, RV.nv);
-heart.add(new THREE.Mesh(rvGeo, M.rvWall), new THREE.Mesh(rvGeo, M.rvEndo));
-function updateRV(d, scale) {
-  fillGrid(rvGeo, RV.nu, RV.nv, (s, v) => {
-    const u = lerp(-0.12, 0.86, s), uc = Math.max(0, u);
-    const phi = lerp(RV.phi0, RV.phi1, v);
-    const bump = (0.55 + 1.15 * scale) * Math.pow(Math.sin(Math.PI * v), 0.75) * Math.pow(Math.sin(Math.PI * Math.min(1, (u + 0.12) / 0.98)), 0.55);
-    const r = rOut(uc, d) + 0.02 + bump;
-    return lvPoint(-(d.a + d.w) * u, r, phi);
-  });
+// ---------- coronary arteries ----------
+const coronaries = {};
+function coronaryTube(name, n) {
+  const geo = gridGeometry(n, 10); const m = new THREE.Mesh(geo, M.coronary); heart.add(m);
+  coronaries[name] = { geo, n };
+}
+function setCoronary(name, pts, r = 0.2) {
+  const c = coronaries[name], curve = new THREE.CatmullRomCurve3(pts, false, "centripetal"), fr = curve.computeFrenetFrames(c.n, false);
+  fillGrid(c.geo, c.n, 10, (u, v) => { const i = Math.round(u * c.n), a = v * Math.PI * 2, rr = r * lerp(1, 0.6, u); return curve.getPointAt(i / c.n).add(fr.normals[i].clone().multiplyScalar(rr * Math.cos(a))).add(fr.binormals[i].clone().multiplyScalar(rr * Math.sin(a))); });
+}
+["lad", "cx", "rca", "pda", "lm"].forEach((k) => coronaryTube(k, 40));
+const LEFT_SINUS = AORTIC.c.clone().add(V(1.05, 0.55, 0.15)), RIGHT_SINUS = AORTIC.c.clone().add(V(-0.75, 0.5, 0.95));
+function updateCoronaries(d) {
+  const onLV = (u, phi, lift = 0.22) => at(LVF, (d.a + d.w) * u, rOut(u, d) + lift, phi);
+  const lad = []; for (let i = 0; i <= 12; i++) lad.push(onLV(lerp(0.04, 0.97, i / 12), RV_SPAN[0] - 0.04));
+  setCoronary("lad", lad);
+  setCoronary("lm", [LEFT_SINUS, LEFT_SINUS.clone().add(V(0.9, 0.0, 0.5)), lad[0]], 0.24);
+  const cx = []; for (let i = 0; i <= 14; i++) cx.push(onLV(0.05, lerp(RV_SPAN[0] - 0.15, -100 * D2R, i / 14), 0.25));
+  setCoronary("cx", cx);
+  const pda = []; for (let i = 0; i <= 10; i++) pda.push(onLV(lerp(0.08, 0.85, i / 10), RV_SPAN[1] + 0.05));
+  setCoronary("pda", pda, 0.17);
+}
+{ // RCA in the right AV groove (static, on the RV)
+  const pts = [RIGHT_SINUS];
+  for (let i = 0; i <= 12; i++) { const t = lerp(0.12, 0.999, i / 12), phi = lerp(RV_SPAN[0], RV_SPAN[1], t); pts.push(at(LVF, 0.15, LV.rb + LV.wb + rvBulge(0, t) + 0.3, phi)); }
+  pts.push(at(LVF, 0.25, rOut(0.03, D_REF) + 0.3, RV_SPAN[1] + 0.05));
+  setCoronary("rca", pts, 0.21);
 }
 
 // ---------- valves ----------
-const NU = 10, NV = 28;
-const mitralGeo = { ant: gridGeometry(NU, NV), post: gridGeometry(NU, NV) };
-const mvAnt = new THREE.Mesh(mitralGeo.ant, M.valve), mvPost = new THREE.Mesh(mitralGeo.post, M.valve);
-heart.add(mvAnt, mvPost);
-const cuspGeo = [0, 1, 2].map(() => gridGeometry(NU, 20));
-const cusps = cuspGeo.map((g) => { const m = new THREE.Mesh(g, M.valve); heart.add(m); return m; });
-const aoU = V(0, 0, 1), aoV = AORTIC.axis.clone().cross(aoU).normalize();
+const NU = 10;
+function sheet(nv) { const g = gridGeometry(NU, nv); const m = new THREE.Mesh(g, M.valve); heart.add(m); return { g, m, nv }; }
+const mvAnt = sheet(28), mvPost = sheet(28);
+const avCusps = [0, 1, 2].map(() => sheet(20));
+const tvLeaf = [0, 1, 2].map(() => sheet(20));
+const pvCusps = [0, 1, 2].map(() => sheet(16));
+// a ring valve: leaflets hinge on the annulus and swing along `flow` when open
+function ringValve(sh, c, r, flow, basisU, th0, th1, open, { inward, depth, closedDepth = -0.15, back = 0 }) {
+  const n = flow.clone().normalize(), u = basisU.clone().addScaledVector(n, -basisU.dot(n)).normalize(), w = new THREE.Vector3().crossVectors(n, u);
+  fillGrid(sh.g, NU, sh.nv, (s, v) => {
+    const th = lerp(th0, th1, v), edge = Math.sin(Math.PI * v);
+    const dir = u.clone().multiplyScalar(Math.cos(th)).addScaledVector(w, Math.sin(th));
+    const inw = lerp(0.98, inward, open) * lerp(0.78, 1, edge);
+    const dep = lerp(closedDepth, depth, open) * lerp(0.7, 1, edge) + back * edge;
+    return c.clone().addScaledVector(dir, r * (1 - s * inw)).addScaledVector(n, s * dep + 0.03 * Math.sin(Math.PI * s) * (1 - open));
+  });
+}
+const MV_U = new THREE.Vector3().subVectors(AORTIC.c, MITRAL.c).setY(0).normalize(); // anterior leaflet faces the aortic valve
 function updateValves(leaf, stenosis) {
   const o = leaf.mitral, pr = leaf.prolapse;
-  // mitral: two sails on the annulus, a dome when shut, a funnel into the LV when open
-  const ring = (th) => V(0, Math.cos(th), Math.sin(th));
-  const sail = (g, th0, th1, len, back) => fillGrid(g, NU, NV, (s, v) => {
-    const th = lerp(th0, th1, v), dir = ring(th);
-    const edge = Math.sin(Math.PI * v);
-    const inward = lerp(0.98, 0.22, o) * lerp(0.75, 1, edge);
-    const depth = lerp(-0.18, len, o) * lerp(0.7, 1, edge) + back * edge;
-    const r = MITRAL.r * (1 - s * inward);
-    return MITRAL.c.clone().addScaledVector(dir, r).add(V(-s * depth - 0.04 * Math.sin(Math.PI * s) * (1 - o), 0, 0));
-  });
-  sail(mitralGeo.ant, -Math.PI / 2 - 0.15, Math.PI / 2 + 0.15, 2.3, 0);
-  sail(mitralGeo.post, Math.PI / 2 + 0.15, Math.PI * 1.5 - 0.15, 1.5, -1.1 * pr);
-  // aortic: three cusps that fold into the sinuses
-  const a = leaf.aortic;
-  cuspGeo.forEach((g, k) => fillGrid(g, NU, 20, (s, v) => {
-    const th = (k / 3) * Math.PI * 2 + lerp(0.06, Math.PI * 2 / 3 - 0.06, v);
-    const dir = aoU.clone().multiplyScalar(Math.cos(th)).addScaledVector(aoV, Math.sin(th));
-    const edge = Math.sin(Math.PI * v);
-    const inward = lerp(0.98, 0.12, a) * lerp(0.82, 1, edge);
-    const along = lerp(-0.22 * edge, 1.15, a) * s;
-    return AORTIC.c.clone().addScaledVector(dir, AORTIC.r * (1 - s * inward)).addScaledVector(AORTIC.axis, along + 0.08);
-  }));
-  for (const c of cusps) c.material = stenosis ? M.calc : M.valve;
+  ringValve(mvAnt, MITRAL.c, MITRAL.r, V(0, -1, 0), MV_U, -Math.PI / 2 - 0.2, Math.PI / 2 + 0.2, o, { inward: 0.25, depth: 2.6 });
+  ringValve(mvPost, MITRAL.c, MITRAL.r, V(0, -1, 0), MV_U, Math.PI / 2 + 0.2, Math.PI * 1.5 - 0.2, o, { inward: 0.3, depth: 1.7, back: -1.2 * pr });
+  const a = leaf.aortic, ax = aorta.curve.getTangentAt(0);
+  avCusps.forEach((sh, k) => ringValve(sh, AORTIC.c, AORTIC.r, ax, V(1, 0, 0), (k / 3) * Math.PI * 2 + 0.05, ((k + 1) / 3) * Math.PI * 2 - 0.05, a, { inward: 0.12, depth: 1.25, closedDepth: -0.22 }));
+  for (const sh of avCusps) sh.m.material = stenosis ? M.calc : M.valve;
 }
+// right-sided valves are drawn still: tricuspid half open, pulmonic shut (right heart not simulated)
+tvLeaf.forEach((sh, k) => ringValve(sh, TRICUSPID.c, TRICUSPID.r, V(0, -1, 0), V(1, 0, 0), (k / 3) * Math.PI * 2 + 0.06, ((k + 1) / 3) * Math.PI * 2 - 0.06, 0.55, { inward: 0.3, depth: 2.0 }));
+const PV_AX = ptTrunk.curve.getTangentAt(0);
+pvCusps.forEach((sh, k) => ringValve(sh, PULMONIC.c, PULMONIC.r, PV_AX, V(1, 0, 0), (k / 3) * Math.PI * 2 + 0.05, ((k + 1) / 3) * Math.PI * 2 - 0.05, 0, { inward: 0.12, depth: 1.1, closedDepth: -0.2 }));
 
 // papillary muscles and chordae
-const papMeshes = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.48, 1, 20), M.pap); heart.add(m); return m; });
+const papL = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.55, 1, 20), M.pap); heart.add(m); return m; });
+const papR = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.42, 1, 18), M.pap); heart.add(papR);
 const chordGeo = new THREE.BufferGeometry();
-chordGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(2 * 3 * 12), 3));
+chordGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(2 * 3 * 24), 3));
 heart.add(new THREE.LineSegments(chordGeo, chordMat));
-const tmpV = new THREE.Vector3();
+const edgeOf = (sh, v) => { const i = NU * (sh.nv + 1) + Math.round(v * sh.nv), p = sh.g.attributes.position.array; return V(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); };
+let rvPapTip = null;
+{
+  const base = at(LVF, (D_REF.a + D_REF.w) * 0.55, rOut(0.55, D_REF) + 1.0, 112 * D2R);
+  rvPapTip = at(LVF, (D_REF.a + D_REF.w) * 0.32, rOut(0.32, D_REF) + 1.25, 118 * D2R);
+  papR.quaternion.setFromUnitVectors(V(0, 1, 0), new THREE.Vector3().subVectors(rvPapTip, base).normalize());
+  papR.position.copy(base).lerp(rvPapTip, 0.5); papR.scale.set(1, base.distanceTo(rvPapTip), 1);
+}
 function updatePap(d) {
   const tips = [];
-  [2.25, 4.05].forEach((phi, i) => {
-    const uw = 0.6, ut = 0.36;
-    const base = lvPoint(-d.a * uw, rIn(uw, d) - 0.05, phi);
-    const tip = lvPoint(-d.a * ut, rIn(ut, d) * 0.45, phi);
-    alignY(papMeshes[i], tip, base);
-    papMeshes[i].quaternion.setFromUnitVectors(V(0, 1, 0), tmpV.subVectors(tip, base).normalize());
-    papMeshes[i].position.copy(base).lerp(tip, 0.5);
+  [28 * D2R, -112 * D2R].forEach((phi, i) => { // anterolateral, posteromedial
+    const base = at(LVF, d.a * 0.62, rIn(0.62, d) - 0.05, phi), tip = at(LVF, d.a * 0.36, rIn(0.36, d) * 0.5, phi);
+    papL[i].quaternion.setFromUnitVectors(V(0, 1, 0), new THREE.Vector3().subVectors(tip, base).normalize());
+    papL[i].position.copy(base).lerp(tip, 0.5); papL[i].scale.set(1, base.distanceTo(tip), 1);
     tips.push(tip);
   });
-  const edgePt = (g, v) => { const i = NU * (NV + 1) + Math.round(v * NV); const p = g.attributes.position.array; return V(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); };
   const arr = chordGeo.attributes.position.array; let k = 0;
   const link = (a, b) => { arr[k++] = a.x; arr[k++] = a.y; arr[k++] = a.z; arr[k++] = b.x; arr[k++] = b.y; arr[k++] = b.z; };
-  for (const v of [0.2, 0.35, 0.65, 0.8]) link(tips[v < 0.5 ? 1 : 0], edgePt(mitralGeo.ant, v));
-  for (const v of [0.2, 0.4, 0.6, 0.8]) link(tips[v < 0.5 ? 0 : 1], edgePt(mitralGeo.post, v));
-  for (const v of [0.3, 0.7]) link(tips[0], edgePt(mitralGeo.post, v));
-  for (const v of [0.45, 0.55]) link(tips[1], edgePt(mitralGeo.ant, v));
+  for (const v of [0.15, 0.3, 0.45]) link(tips[0], edgeOf(mvAnt, v));
+  for (const v of [0.55, 0.7, 0.85]) link(tips[1], edgeOf(mvAnt, v));
+  for (const v of [0.15, 0.3, 0.45]) link(tips[1], edgeOf(mvPost, v));
+  for (const v of [0.55, 0.7, 0.85]) link(tips[0], edgeOf(mvPost, v));
+  tvLeaf.forEach((sh) => { for (const v of [0.3, 0.5, 0.7]) link(rvPapTip, edgeOf(sh, v)); });
   chordGeo.attributes.position.needsUpdate = true;
   chordGeo.computeBoundingSphere();
   return tips;
 }
 
-// ---------- blood cells ----------
-const RBC_N = 240;
-const rbcGeo = new THREE.SphereGeometry(0.11, 10, 6); rbcGeo.scale(1, 0.45, 1);
+// ---------- blood cells: left-sided flow only (that is what the model computes) ----------
+const RBC_N = 260;
+const rbcGeo = new THREE.SphereGeometry(0.13, 10, 6); rbcGeo.scale(1, 0.45, 1);
 const rbcs = new THREE.InstancedMesh(rbcGeo, M.rbc, RBC_N);
+rbcs.material.clippingPlanes = clips;
 heart.add(rbcs);
-const aortaSamples = Array.from({ length: 12 }, (_, i) => aorta.curve.getPointAt(0.04 + (i / 11) * 0.92));
+const aortaSamples = Array.from({ length: 14 }, (_, i) => aorta.curve.getPointAt(0.03 + (i / 13) * 0.94));
+const lvMid = at(LVF, 3.6, 0, 0), lvApexIn = at(LVF, 6.6, 0, 0);
 const PATHS = {
-  inflow: new THREE.CatmullRomCurve3([V(4.6, -1.6, -1.6), LA.c.clone(), V(1.2, -1.6, -0.3), MITRAL.c.clone(), V(-1.5, -0.6, -0.4), V(-3.8, -0.1, -0.4), V(-5.2, 0.1, -0.3)]),
-  outflow: new THREE.CatmullRomCurve3([V(-4.6, 0.3, -0.4), V(-2.6, 0.7, -0.4), V(-0.8, 1.1, -0.3), AORTIC.c.clone(), ...aortaSamples]),
-  jet: new THREE.CatmullRomCurve3([MITRAL.c.clone().add(V(-0.3, 0, 0)), V(1.0, -1.4, -0.3), V(2.0, -2.1, -0.5), LA.c.clone().add(V(0.6, 0, 0))]),
+  inflow: new THREE.CatmullRomCurve3([V(5.6, 1.6, -3.2), LA.c.clone().add(V(0.6, 0.2, -0.4)), MITRAL.c.clone().add(V(0, 0.9, 0)), MITRAL.c.clone(), MITRAL.c.clone().add(V(0.2, -2.2, 0.3)), lvMid, lvApexIn]),
+  outflow: new THREE.CatmullRomCurve3([lvApexIn.clone().add(V(-0.6, 0.4, 0)), lvMid.clone().add(V(-1.2, 0, 0.3)), AORTIC.c.clone().add(V(0.2, -1.4, 0)), AORTIC.c.clone(), ...aortaSamples]),
+  jet: new THREE.CatmullRomCurve3([MITRAL.c.clone().add(V(0, -0.4, 0)), MITRAL.c.clone().add(V(0.2, 0.9, -0.3)), LA.c.clone().add(V(0.4, 0.4, -0.6)), LA.c.clone().add(V(1.6, 0.6, -1.2))]),
 };
 const LEN = Object.fromEntries(Object.entries(PATHS).map(([k, c]) => [k, c.getLength()]));
 const cells = Array.from({ length: RBC_N }, (_, i) => {
-  const path = i < 110 ? "inflow" : i < 210 ? "outflow" : "jet";
-  const jr = path === "jet" ? 0.3 : 0.75;
-  return { path, s: Math.random(), off: V((Math.random() - 0.5) * jr, (Math.random() - 0.5) * jr, -Math.random() * jr), spin: new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3) };
+  const path = i < 120 ? "inflow" : i < 228 ? "outflow" : "jet", jr = path === "jet" ? 0.35 : 0.8;
+  return { path, s: Math.random(), off: V((Math.random() - 0.5) * jr, (Math.random() - 0.5) * jr, (Math.random() - 0.5) * jr), spin: new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3) };
 });
 const dummy = new THREE.Object3D();
 function updateCells(s, dtModel) {
@@ -526,7 +619,7 @@ function updateCells(s, dtModel) {
   cells.forEach((c, i) => {
     const q = flow[c.path];
     c.s = (((c.s + (q * (c.path === "jet" ? 0.05 : 0.03) * dtModel) / LEN[c.path] * 4) % 1) + 1) % 1;
-    const vis = sstep(0, 0.06, c.s) * sstep(1, 0.92, c.s) * sstep(1, 25, Math.abs(q));
+    const vis = sstep(0, 0.05, c.s) * sstep(1, 0.93, c.s) * sstep(1, 25, Math.abs(q));
     dummy.position.copy(PATHS[c.path].getPointAt(c.s)).add(c.off);
     dummy.rotation.copy(c.spin);
     dummy.scale.setScalar(Math.max(0.001, vis));
@@ -536,79 +629,101 @@ function updateCells(s, dtModel) {
   rbcs.instanceMatrix.needsUpdate = true;
 }
 
+// ---------- fit the camera to the anatomy ----------
+updateLV(lvDims(120)); updateLA(55); updateCoronaries(lvDims(120));
+heart.updateMatrixWorld(true);
+{
+  const box = new THREE.Box3();
+  box.setFromObject(lvMesh);
+  for (const o of [aorta.group, ptTrunk.group]) box.expandByObject(o);
+  box.expandByPoint(V(-4.8, 0, 0).applyMatrix4(heart.matrixWorld));
+  box.expandByPoint(SVC_PTS[2].clone().applyMatrix4(heart.matrixWorld));
+  box.expandByPoint(IVC_PTS[2].clone().applyMatrix4(heart.matrixWorld));
+  box.getCenter(TARGET);
+  const size = box.getSize(new THREE.Vector3());
+  FIT = { w: size.x * 1.12, h: size.y * 1.06 };
+}
+{ // look squarely at the cut face (the removed side of the plane), a little from above
+  const n = CUT_LOCAL.normal.clone().negate().transformDirection(heart.matrixWorld);
+  const d = n.multiplyScalar(OPTS.cutView ?? 1.6).add(V(0, 0, 1)).normalize(); // between the body's front and the cut face
+  HOME.az = Math.atan2(d.x, d.z) / D2R;
+  HOME.el = Math.max(4, Math.min(26, Math.asin(d.y) / D2R));
+}
+placeCamera(HOME.az, HOME.el);
+controls.target.copy(TARGET);
+controls.update();
+controls.saveState();
+new ResizeObserver(resize).observe(host);
+resize();
+
 // ---------- ground shadow ----------
 {
   const c = document.createElement("canvas"); c.width = c.height = 128;
   const g = c.getContext("2d"), grd = g.createRadialGradient(64, 64, 4, 64, 64, 64);
-  grd.addColorStop(0, "rgba(60,20,20,.35)"); grd.addColorStop(1, "rgba(60,20,20,0)");
+  grd.addColorStop(0, "rgba(60,20,20,.32)"); grd.addColorStop(1, "rgba(60,20,20,0)");
   g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
-  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), Object.assign(new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }), { userData: { outlineParameters: { visible: false } } }));
-  shadow.rotation.x = -Math.PI / 2; shadow.position.set(0, -5.4, -1.5);
+  const sm = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false });
+  sm.userData.outlineParameters = NO_LINE;
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(FIT.w * 1.1, FIT.w * 0.6), sm);
+  shadow.rotation.x = -Math.PI / 2; shadow.position.set(TARGET.x, TARGET.y - FIT.h * 0.47, TARGET.z - 2);
   scene.add(shadow);
 }
 
 // ---------- labels ----------
 const labelLayer = document.getElementById("labels3d");
-const LABELS = ["LV", "LA", "RV", "Aorta", "Mitral valve", "Aortic valve", "Pulmonary artery", "Papillary muscle", "Septum", "Pulmonary veins"].map((text) => {
-  const el = document.createElement("span"); el.className = "l3"; el.innerHTML = `<i></i>${text}`; labelLayer.appendChild(el); return { text, el, at: V(0, 0, 0) };
-});
+const LABEL_NAMES = ["LV", "LA", "RV", "RA", "Aorta", "Pulmonary trunk", "SVC", "IVC", "Mitral valve", "Tricuspid valve", "Aortic valve", "Pulmonary valve", "Septum", "Papillary muscle", "Pulmonary veins", "LAD"];
+const DEFAULT_SHOWN = new Set(["LV", "LA", "RV", "RA", "Aorta", "Pulmonary trunk", "SVC", "IVC", "Mitral valve", "Tricuspid valve", "Aortic valve", "Pulmonary valve"]);
+const LABELS = LABEL_NAMES.map((text) => { const el = document.createElement("span"); el.className = "l3"; el.innerHTML = `<i></i>${text}`; labelLayer.appendChild(el); return { text, el, at: V(0, 0, 0) }; });
 const L = Object.fromEntries(LABELS.map((l) => [l.text, l]));
+const toWorld = (p) => p.clone().applyMatrix4(heart.matrixWorld);
 function placeLabels(show) {
   labelLayer.style.display = show ? "" : "none";
   if (!show) return;
   const w = host.clientWidth, h = host.clientHeight;
   for (const l of LABELS) {
-    if (window.__tagText) {
-      const html = window.__tagText(l.text);
-      if (html === null) { l.el.style.display = "none"; continue; }
-      l.el.style.display = "";
-      if (l.html !== html) { l.el.innerHTML = `<i></i>${html}`; l.html = html; }
-    }
-    const p = l.at.clone().applyMatrix4(heart.matrixWorld).project(camera);
+    const html = window.__tagText ? window.__tagText(l.text) : DEFAULT_SHOWN.has(l.text) ? l.text : null;
+    if (html === null) { l.el.style.display = "none"; continue; }
+    l.el.style.display = "";
+    if (l.html !== html) { l.el.innerHTML = `<i></i>${html}`; l.html = html; }
+    const p = toWorld(l.at).project(camera);
     l.el.style.transform = `translate(${((p.x + 1) / 2) * w}px, ${((1 - p.y) / 2) * h}px)`;
   }
 }
 
-// ---------- per-frame hook from the shared model loop ----------
-let cutaway = true, rvDrawn = false;
-window.__heart3dScreen = (name) => {
-  const l = L[name]; if (!l) return null;
-  const p = l.at.clone().applyMatrix4(heart.matrixWorld).project(camera);
-  return [((p.x + 1) / 2) * host.clientWidth, ((1 - p.y) / 2) * host.clientHeight];
-};
-window.__heart3dCut = (on) => { cutaway = on; clip.constant = on ? 0 : 1000; };
-window.__heart3dReset = () => { controls.reset(); camera.zoom = 1; placeCamera(HOME.az, HOME.el); controls.target.copy(TARGET); camera.updateProjectionMatrix(); };
-controls.saveState();
+// ---------- public hooks ----------
+window.__heart3dScreen = (name) => { const l = L[name]; if (!l) return null; const p = toWorld(l.at).project(camera); return [((p.x + 1) / 2) * host.clientWidth, ((1 - p.y) / 2) * host.clientHeight]; };
+window.__heart3dCut = (on) => { cutaway = on; updatePlanes(); };
+window.__heart3dReset = () => { controls.reset(); };
 window.__heart3d = (s, leaf, dtModel, state) => {
   const d = lvDims(s.vlv);
-  const tmp = new THREE.LatheGeometry(lvProfile(d), LV.seg);
-  lvGeo.attributes.position.array.set(tmp.attributes.position.array);
-  lvGeo.attributes.position.needsUpdate = true;
-  lvGeo.computeVertexNormals();
-  lvGeo.computeBoundingSphere();
-  tmp.dispose();
+  updateLV(d);
   const la = updateLA(s.vla);
-  veins.forEach(({ d: dir, m }) => alignY(m, LA.c.clone().addScaledVector(dir, la * 0.85), LA.c.clone().addScaledVector(dir, la + 1.6)));
-  if (window.__heart3dOptions?.staticRV) { if (!rvDrawn) { updateRV(lvDims(120), 1); rvDrawn = true; } }
-  else updateRV(d, Math.sqrt(Math.min(Math.max(s.vlv, 20), 200) / 120));
   aorta.update(Math.max(-0.05, (s.pao - 80) * 0.004));
   updateValves(leaf, state.stenosis);
   const tips = updatePap(d);
+  updateCoronaries(d);
   updateCells(s, dtModel);
-  M.myo.emissive.setRGB(0.18 * s.alv, 0.02 * s.alv, 0.02 * s.alv);
-  // label anchors
-  L["LV"].at.copy(lvPoint(-d.a * 0.55, d.b * 0.2, Math.PI));
-  L["LA"].at.copy(LA.c).add(V(0.4, -0.3, -0.8));
-  L["RV"].at.copy(lvPoint(-d.a * 0.35, rOut(0.35, d) + 0.9, 1.5 * Math.PI - 0.5));
-  L["Aorta"].at.copy(aorta.curve.getPointAt(0.33));
-  L["Mitral valve"].at.copy(MITRAL.c).add(V(-0.6, -0.6, 0));
-  L["Aortic valve"].at.copy(AORTIC.c).add(V(0.5, 0.3, 0));
-  L["Pulmonary artery"].at.copy(paTrunk.curve.getPointAt(0.7));
-  L["Papillary muscle"].at.copy(tips[0]).add(V(-0.4, -0.4, 0));
-  L["Septum"].at.copy(lvPoint(-d.a * 0.45, d.b + d.w * 0.5, 1.5 * Math.PI - 0.1));
-  L["Pulmonary veins"].at.copy(veins[1].m.position);
+  if (!TOON) M.myo.emissive.setRGB(0.18 * s.alv, 0.02 * s.alv, 0.02 * s.alv);
+  // label anchors (heart frame)
+  L["LV"].at.copy(at(LVF, d.a * 0.55, d.b * 0.15, 200 * D2R));
+  L["LA"].at.copy(LA.c).add(V(0.6, 0.3, -0.4));
+  L["RV"].at.copy(at(LVF, (D_REF.a + D_REF.w) * 0.3, rOut(0.3, D_REF) + 1.3, 150 * D2R));
+  L["RA"].at.copy(RA.c).add(V(-0.8, 0.2, -0.5));
+  L["Aorta"].at.copy(aorta.curve.getPointAt(0.22));
+  L["Pulmonary trunk"].at.copy(ptTrunk.curve.getPointAt(0.55));
+  L["SVC"].at.copy(SVC_PTS[1]).add(V(-0.6, 1.4, 0));
+  L["IVC"].at.copy(IVC_PTS[2]).add(V(0, 0.4, 0));
+  L["Mitral valve"].at.copy(MITRAL.c).add(V(0.5, -0.5, 0));
+  L["Tricuspid valve"].at.copy(TRICUSPID.c).add(V(-0.4, -0.4, 0));
+  L["Aortic valve"].at.copy(AORTIC.c).add(V(-0.2, 0.4, 0));
+  L["Pulmonary valve"].at.copy(PULMONIC.c).add(V(0.6, 0.2, 0.4));
+  L["Septum"].at.copy(at(LVF, d.a * 0.4, rOut(0.4, d) - d.w * 0.5, 130 * D2R));
+  L["Papillary muscle"].at.copy(tips[1]);
+  L["Pulmonary veins"].at.copy(pveins[1].position);
+  L["LAD"].at.copy(at(LVF, (d.a + d.w) * 0.5, rOut(0.5, d) + 0.3, RV_SPAN[0]));
   controls.update();
   heart.updateMatrixWorld();
+  updatePlanes();
   if (effect) effect.render(scene, camera); else renderer.render(scene, camera);
   placeLabels(state.labels);
 };
